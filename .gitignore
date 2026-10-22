@@ -1,0 +1,20 @@
+# Supabase CLI state
+supabase/.temp/
+supabase/.branches/
+.branches/
+
+# Secrets and local env (never commit)
+.env
+.env.*
+!.env.example
+*.p8
+*.pem
+*.key
+
+# Data
+backups/
+notion-data/
+
+# Tooling
+node_modules/
+.DS_Store
