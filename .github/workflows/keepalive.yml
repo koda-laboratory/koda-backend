@@ -1,0 +1,32 @@
+name: Daily keepalive
+
+# Fallback for the pg_cron keepalive job: calls the `keepalive` Edge Function once a day so the
+# free-plan project is never paused, and purges old tombstones.
+# Requires the KODA_FUNCTIONS_URL and KEEPALIVE_SECRET repository secrets.
+on:
+  schedule:
+    - cron: "41 6 * * *" # daily 06:41 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call keepalive
+        env:
+          KODA_FUNCTIONS_URL: ${{ secrets.KODA_FUNCTIONS_URL }}
+          KEEPALIVE_SECRET: ${{ secrets.KEEPALIVE_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KODA_FUNCTIONS_URL" ] || [ -z "$KEEPALIVE_SECRET" ]; then
+            printf '::error::KODA_FUNCTIONS_URL and KEEPALIVE_SECRET secrets are required\n'
+            exit 1
+          fi
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 10 \
+            -X POST "${KODA_FUNCTIONS_URL%/}/keepalive" \
+            -H "x-koda-secret: $KEEPALIVE_SECRET" \
+            -H "content-type: application/json" \
+            -d '{}'

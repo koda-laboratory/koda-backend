@@ -1,0 +1,46 @@
+name: Weekly database backup
+
+# The free plan has no backups: dump the `koda` database every week and keep it as a private
+# artifact for 30 days. Requires the SUPABASE_DB_URL repository secret.
+on:
+  schedule:
+    - cron: "23 3 * * 0" # Sundays 03:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.121.0
+
+      - name: Dump roles, schema and data
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            printf '::error::SUPABASE_DB_URL secret is not set\n'
+            exit 1
+          fi
+          mkdir -p backup
+          supabase db dump --db-url "$SUPABASE_DB_URL" --role-only -f backup/roles.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/schema.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL" --data-only --use-copy -f backup/data.sql
+          ls -lh backup
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: koda-db-${{ github.run_id }}
+          path: backup/
+          retention-days: 30
+          if-no-files-found: error
