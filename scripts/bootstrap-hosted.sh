@@ -59,7 +59,7 @@ unset push_secret keepalive_secret
 
 echo "==> Secret key for the admin scripts"
 SUPABASE_SECRET_KEY="$(
-  supabase projects api-keys --project-ref "$PROJECT_REF" -o json | python3 -c '
+  supabase projects api-keys --project-ref "$PROJECT_REF" --reveal -o json | python3 -c '
 import json, sys
 data = json.load(sys.stdin)
 keys = data if isinstance(data, list) else data.get("keys", data.get("api_keys", []))
