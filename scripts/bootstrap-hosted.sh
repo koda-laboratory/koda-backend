@@ -75,12 +75,27 @@ print(secret)
 )"
 export SUPABASE_URL SUPABASE_SECRET_KEY
 
-echo "==> Accounts (you will be asked for each password)"
+echo "==> Accounts (passwords are read without echo)"
+read_password() {
+  local first second
+  while true; do
+    read -rsp "Password for $1: " first; echo >&2
+    read -rsp "Repeat it: " second; echo >&2
+    [[ -n "$first" && "$first" == "$second" ]] && break
+    echo "They do not match or are empty; try again." >&2
+  done
+  KODA_USER_PASSWORD="$first"
+  export KODA_USER_PASSWORD
+}
+
+read_password espeso86@gmail.com
 owner_output="$(deno run --allow-env --allow-net scripts/create-user.ts \
   --email espeso86@gmail.com --name "Manu" --household-name "Casa" --role owner | tee /dev/stderr)"
 household_id="$(grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' <<<"$owner_output" | tail -1)"
+read_password olga.cardielpal@gmail.com
 deno run --allow-env --allow-net scripts/create-user.ts \
   --email olga.cardielpal@gmail.com --name "Olga" --household-id "$household_id" --role member
+unset KODA_USER_PASSWORD
 
 echo "==> Notion import into household ${household_id}"
 deno run --allow-env --allow-read --allow-net scripts/import-notion.ts --household-id "$household_id"
