@@ -52,6 +52,13 @@ export const SILENT_PUSH_OPTIONS: ApnsRequestOptions = {
   expirationSeconds: 3600,
 };
 
+/** Visible alerts (defrost reminders): delivered immediately, dropped after 12 hours. */
+export const ALERT_PUSH_OPTIONS: ApnsRequestOptions = {
+  pushType: "alert",
+  priority: 10,
+  expirationSeconds: 12 * 3600,
+};
+
 const TOKEN_TTL_MS = 50 * 60 * 1000;
 
 /** Reads the APNs configuration from the environment; null when incomplete. */

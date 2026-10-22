@@ -10,7 +10,7 @@ description: Operate and extend Koda's Apple Push Notification pipeline — devi
 1. App registers its token after login: `PUT /functions/v1/api/devices` `{ id, apns_token (hex), platform: ios|macos, apns_env: sandbox|production, app_version }` → `public.register_device` (moves a token/installation to the current user). Logout: `DELETE /devices/:id`.
 2. Any write to a synced table → trigger `t90_enqueue_push` → one `public.push_queue` row per (household, transaction) with `payload = { reasons, cursor }`, `actor_device_id` from `apply_mutations`.
 3. pg_cron job `koda-push` (every minute) → `private.kick_push()` → if there are pending rows, `net.http_post` to `<koda_functions_url>/push` with header `x-koda-secret` (Vault `koda_push_secret`).
-4. `push` function: `claim_push_batch` (marks rows sent) → `push_devices_for_households` → `planSilentPushes` (one push per device; skip a device only if it was the actor of every change of its household) → `ApnsClient.send` → `410` sets `devices.disabled_at`.
+4. `push` function: `claim_push_batch` (marks rows sent) → `push_devices_for_households` → `planPushes` (`sync`: one silent push per device, skipping a device only if it was the actor of every change of its household; `defrost`: one alert per reminder and device) → `ApnsClient.send` → `410` sets `devices.disabled_at`.
 
 ## Silent payload (PLAN.md 6.4)
 
@@ -19,6 +19,17 @@ description: Operate and extend Koda's Apple Push Notification pipeline — devi
 ```
 
 Headers: `apns-push-type: background`, `apns-priority: 5`, `apns-expiration: now + 3600`, `apns-topic: com.kodalabs.app` (same bundle id on iOS and macOS). Host: `api.sandbox.push.apple.com` for `sandbox` devices (Xcode builds), `api.push.apple.com` for `production` (TestFlight).
+
+## Visible defrost alert (PLAN.md 3.6)
+
+`due_defrost_reminders()` (pg_cron every 15 min) inserts `push_queue` rows with `kind = 'defrost'`, `payload = { title, body, frozen_item_id, product_id, meal_plan_entry_id, recipe_id }` (Spanish copy, e.g. "Descongela carrilleras" / "Mañana a las 14:30 toca Paella de carrilleras") and `dedupe_key = 'defrost:<frozen_item_id>:<remind epoch>'` (unique; sync rows are unique per `(household_id, txid) where kind = 'sync'`). The `push` function sends each one to **every** device of the household, actor included:
+
+```json
+{ "aps": { "alert": { "title": "…", "body": "…" }, "sound": "default", "category": "DEFROST", "thread-id": "defrost" },
+  "koda": { "kind": "defrost", "frozen_item_id": "…", "recipe_id": "…", "meal_plan_entry_id": "…" } }
+```
+
+Headers: `apns-push-type: alert`, `apns-priority: 10`, `apns-expiration: now + 12 h`, `apns-collapse-id: defrost-<frozen_item_id>`. `sync` rows keep the batched silent push; unknown kinds are ignored.
 
 ## Secrets
 
@@ -34,7 +45,7 @@ Headers: `apns-push-type: background`, `apns-priority: 5`, `apns-expiration: now
 
 ## Extending
 
-- Visible notifications: add a payload builder next to `buildSilentPayload` with `alert`, `category`, `thread-id`, send with `{ pushType: "alert", priority: 10 }`; keep silent sync pushes separate.
+- Visible notifications: add a `kind`, a payload builder next to `buildDefrostPayload` and a branch in `planPushes`; send with `ALERT_PUSH_OPTIONS`; keep silent sync pushes separate.
 - Provider tokens are cached 50 min; `403 ExpiredProviderToken` clears the cache.
 - Tests: `tests/functions/push_test.ts` (planning, drain, 410) and `apns_test.ts` (JWT header/claims, hosts, headers) with fake fetch and a generated P-256 key. Never use the real key in tests.
 

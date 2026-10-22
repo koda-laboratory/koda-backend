@@ -1,6 +1,7 @@
-// Drains push_queue and sends one silent background push per device (PLAN.md 6.2 / 6.4).
-import { type ApnsSender, SILENT_PUSH_OPTIONS } from "../_shared/apns.ts";
-import { planSilentPushes, type PushDevice, type QueueRow } from "../_shared/domain/push.ts";
+// Drains push_queue: one silent background push per device for sync rows (PLAN.md 6.2 / 6.4) and a
+// visible alert to every household device for defrost reminders (PLAN.md 3.6).
+import { ALERT_PUSH_OPTIONS, type ApnsRequestOptions, type ApnsSender, SILENT_PUSH_OPTIONS } from "../_shared/apns.ts";
+import { type PlannedPush, planPushes, type PushDevice, type QueueRow } from "../_shared/domain/push.ts";
 
 export interface PushStore {
   /** Claims (marks as sent) pending queue rows. */
@@ -17,6 +18,10 @@ export interface DrainResult {
   skipped?: string;
 }
 
+function optionsFor(push: PlannedPush): ApnsRequestOptions {
+  return push.kind === "defrost" ? { ...ALERT_PUSH_OPTIONS, collapseId: push.collapseId } : SILENT_PUSH_OPTIONS;
+}
+
 export async function drainPushQueue(
   store: PushStore,
   apns: ApnsSender | null,
@@ -31,14 +36,20 @@ export async function drainPushQueue(
 
   const householdIds = [...new Set(queue.map((row) => row.household_id))];
   const devices = await store.devicesFor(householdIds);
-  const pushes = planSilentPushes(queue, devices);
+  const pushes = planPushes(queue, devices);
 
   const results = await Promise.allSettled(
-    pushes.map(async ({ device, payload }) => {
-      const result = await apns.send(device.apns_token, device.apns_env, payload, SILENT_PUSH_OPTIONS);
+    pushes.map(async (push) => {
+      const { device, payload } = push;
+      const result = await apns.send(device.apns_token, device.apns_env, payload, optionsFor(push));
       if (result.unregistered) await store.disableDevice(device.device_id);
       if (!result.ok) {
-        console.warn("push: APNs rejected", { device: device.device_id, status: result.status, reason: result.reason });
+        console.warn("push: APNs rejected", {
+          device: device.device_id,
+          kind: push.kind,
+          status: result.status,
+          reason: result.reason,
+        });
       }
       return result;
     }),
