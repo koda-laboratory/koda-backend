@@ -231,3 +231,79 @@ Deno.test("unknown routes are 404 JSON", async () => {
   assertEquals(response.status, 404);
   assert((await response.json()).error);
 });
+
+Deno.test("PATCH /households/:id/settings updates slot times and shopping weekday", async () => {
+  const household = "11111111-1111-4111-8111-111111111111";
+  const updated = {
+    id: household,
+    name: "Casa",
+    timezone: "Europe/Madrid",
+    slot_times: { breakfast: "09:00", lunch: "14:00", snack: "18:00", dinner: "21:30" },
+    shopping_weekday: 6,
+    role: "member",
+    members: [],
+  };
+  const { request, db } = setup({ update_household_settings: () => ({ data: updated }) });
+  const response = await request("PATCH", `/households/${household}/settings`, {
+    slot_times: { lunch: "14:00" },
+    shopping_weekday: 6,
+  });
+  assertEquals(response.status, 200);
+  assertEquals(await response.json(), updated);
+  assertEquals(db.calls[0], {
+    fn: "update_household_settings",
+    args: { p_household_id: household, p_slot_times: { lunch: "14:00" }, p_shopping_weekday: 6 },
+  });
+
+  await request("PATCH", `/households/${household}/settings`, { shopping_weekday: 1 });
+  assertEquals(db.calls[1].args, { p_household_id: household, p_slot_times: null, p_shopping_weekday: 1 });
+});
+
+Deno.test("PATCH /households/:id/settings validates the body", async () => {
+  const household = "11111111-1111-4111-8111-111111111111";
+  const { request, db } = setup();
+  const cases: unknown[] = [
+    {},
+    { slot_times: { lunch: "2:30" } },
+    { slot_times: { lunch: "24:00" } },
+    { slot_times: { brunch: "11:00" } },
+    { slot_times: "14:30" },
+    { shopping_weekday: 0 },
+    { shopping_weekday: 8 },
+    { shopping_weekday: 2.5 },
+    { name: "Otra casa" },
+  ];
+  for (const body of cases) {
+    const response = await request("PATCH", `/households/${household}/settings`, body);
+    assertEquals(response.status, 400, JSON.stringify(body));
+    assertEquals((await response.json()).error.code, "invalid_request");
+  }
+  assertEquals((await request("PATCH", "/households/nope/settings", { shopping_weekday: 1 })).status, 400);
+  assertEquals(db.calls.length, 0);
+});
+
+Deno.test("PATCH /households/:id/settings maps database errors", async () => {
+  const household = "11111111-1111-4111-8111-111111111111";
+  let result: { data?: unknown; error?: unknown } = { error: { code: "P0002", message: "household not found" } };
+  const { request } = setup({ update_household_settings: () => result });
+  assertEquals((await request("PATCH", `/households/${household}/settings`, { shopping_weekday: 3 })).status, 404);
+  result = { error: { code: "22023", message: "slot lunch must be HH:MM" } };
+  assertEquals((await request("PATCH", `/households/${household}/settings`, { shopping_weekday: 3 })).status, 400);
+  result = { data: null };
+  assertEquals((await request("PATCH", `/households/${household}/settings`, { shopping_weekday: 3 })).status, 404);
+});
+
+Deno.test("sync/push accepts frozen_items mutations", async () => {
+  const { request, db } = setup({ apply_mutations: () => ({ data: { applied: [], rejected: [], cursor: null } }) });
+  const response = await request("POST", "/sync/push", {
+    mutations: [{
+      table: "frozen_items",
+      id: "f0000000-0000-4000-8000-000000000001",
+      op: "upsert",
+      fields: { resolved_at: "2026-10-22T10:00:00Z" },
+      client_ts: "2026-10-22T10:00:00Z",
+    }],
+  });
+  assertEquals(response.status, 200);
+  assertEquals(db.calls[0].fn, "apply_mutations");
+});

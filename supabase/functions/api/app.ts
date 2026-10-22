@@ -6,10 +6,12 @@ import { callRpc, type RpcClient } from "../_shared/db.ts";
 import { applyMutations, type Mutation, pullChanges } from "../_shared/domain/sync.ts";
 import { expandRecipe } from "../_shared/domain/recipes.ts";
 import { acceptDraft, discardDraft, shoppingFromPlan } from "../_shared/domain/planning.ts";
+import { updateHouseholdSettings } from "../_shared/domain/households.ts";
 import {
   deviceSchema,
   expandSchema,
   fromPlanSchema,
+  householdSettingsSchema,
   idParamSchema,
   parseOrThrow,
   syncPullQuerySchema,
@@ -63,6 +65,12 @@ export function createApiApp(deps: ApiDeps): Hono<Env> {
   app.use("*", requireAuth(deps));
 
   app.get("/me", async (c) => c.json(await callRpc(c.get("db"), "get_me")));
+
+  app.patch("/households/:id/settings", async (c) => {
+    const id = parseOrThrow(idParamSchema, c.req.param("id"));
+    const body = parseOrThrow(householdSettingsSchema, await readJson(c));
+    return c.json(await updateHouseholdSettings(c.get("db"), id, body));
+  });
 
   app.post("/sync/push", async (c) => {
     const body = parseOrThrow(syncPushSchema, await readJson(c));

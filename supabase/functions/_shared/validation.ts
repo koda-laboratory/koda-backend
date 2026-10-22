@@ -60,6 +60,25 @@ export const expandSchema = z.object({
   servings: z.number().positive().max(100).nullable().optional(),
 });
 
+export const MEAL_SLOTS = ["breakfast", "lunch", "snack", "dinner"] as const;
+const hhmm = z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "must be HH:MM (24 h)");
+
+/** PATCH /households/:id/settings. slot_times may contain a subset of the four slots (merged). */
+export const householdSettingsSchema = z
+  .object({
+    slot_times: z
+      .object({ breakfast: hhmm, lunch: hhmm, snack: hhmm, dinner: hhmm })
+      .partial()
+      .strict()
+      .optional(),
+    shopping_weekday: z.number().int().min(1).max(7).optional(),
+  })
+  .strict()
+  .refine((v) => v.slot_times !== undefined || v.shopping_weekday !== undefined, {
+    message: "slot_times or shopping_weekday is required",
+  });
+export type HouseholdSettingsBody = z.infer<typeof householdSettingsSchema>;
+
 export const idParamSchema = uuid;
 
 /** Parses `input` or throws a 400 ApiError with the zod issues. */
