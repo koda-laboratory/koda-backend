@@ -54,7 +54,8 @@ deno task fmt
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/health` | no auth |
-| GET | `/me` | profile, households and members |
+| GET | `/me` | profile, households (with `slot_times`, `shopping_weekday`) and members |
+| PATCH | `/households/:id/settings` | `{ slot_times?: { breakfast?, lunch?, snack?, dinner?: "HH:MM" }, shopping_weekday?: 1–7 }` (ISO, 1 = Monday; any member; partial slot times are merged) → household as in `/me` |
 | POST | `/sync/push` | `{ device_id, mutations: [{ table, id, op: upsert\|delete, fields, client_ts }] }` → `{ applied, rejected, cursor }` |
 | GET | `/sync/pull?cursor=N&limit=500` | `{ changes: { table: rows[] }, cursor, has_more, reset_required }` |
 | PUT | `/devices` | `{ id, apns_token, platform: ios\|macos, apns_env: sandbox\|production, app_version }` |
@@ -121,7 +122,14 @@ supabase secrets set PUSH_INTERNAL_SECRET=<random> KEEPALIVE_SECRET=<random>
 
 ### Scheduled jobs (pg_cron + pg_net + Vault)
 
-Migration `…06_push` schedules `koda-push` (every minute; calls `push` only when `push_queue` has pending rows) and `koda-keepalive` (daily 04:17 UTC). They read their configuration from Vault and do nothing until it exists. Run once in the SQL editor of `koda`:
+| Job | Schedule | Does |
+|---|---|---|
+| `koda-push` (`…06_push`) | every minute | calls `push` only when `push_queue` has pending rows |
+| `koda-keepalive` (`…06_push`) | daily 04:17 UTC | calls `keepalive` (tombstone purge + activity) |
+| `koda-auto-log-consumptions` (`…08`) | `*/15 * * * *` | `public.auto_log_consumptions()`: logs planned meals whose time has passed (source `auto`, 3-day look-back, skipped/draft/free-text entries never) |
+| `koda-defrost-reminders` (`…10`) | `*/15 * * * *` | `public.due_defrost_reminders()`: enqueues visible `defrost` pushes 24 h before the meal of a frozen product |
+
+The two SQL jobs need no configuration. `koda-push` and `koda-keepalive` read their configuration from Vault and do nothing until it exists. Run once in the SQL editor of `koda`:
 
 ```sql
 select vault.create_secret('https://<project-ref>.supabase.co/functions/v1', 'koda_functions_url');

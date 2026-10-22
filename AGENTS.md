@@ -24,16 +24,20 @@ Backend of Koda, a private household app (first module: Comidita — recipes, me
   - `…04_domain_functions` anti-cycle trigger, `recipe_tree`, `recipe_flat_ingredients`, `recipe_stats` view, `match_product`, `accept_meal_plan_draft`, `discard_meal_plan_draft`, `shopping_from_plan`, `get_me`.
   - `…05_sync_rpc` `apply_mutations`, `pull_changes`, purge watermark.
   - `…06_push` `devices`, `register_device`, `push_queue` + enqueue trigger, `claim_push_batch`, `push_devices_for_households`, `purge_tombstones`, Vault-driven pg_cron jobs.
+  - `…07_household_settings` `households.slot_times` / `shopping_weekday`, `get_me` with settings, `update_household_settings`.
+  - `…08_auto_consumptions` `meal_plan_entries.scheduled_time` / `skipped_at`, `consumptions.source` + live unique index per entry, `private.meal_starts_at`, `auto_log_consumptions` (pg_cron every 15 min).
+  - `…09_shopping_status` `status` (`pending|have|frozen`) on `shopping_entries` / `shopping_entry_items` kept consistent with `checked`, `apply_mutations` with `status` in the `checked_at` group and the `frozen_items` write rules.
+  - `…10_frozen_items` synced `frozen_items` (server-maintained, linking/relinking triggers), `push_queue.dedupe_key` + kind-aware uniqueness, `due_defrost_reminders` (pg_cron every 15 min).
 - `supabase/seed.sql`: local-only household "Casa (local)" with `a@koda.test` / `b@koda.test` (password `koda-local-password`) and sample data.
-- `supabase/tests/database/*.test.sql`: pgTAP (RLS isolation, recipe components, stats/matching, drafts/shopping, apply_mutations conflicts, server_seq/pull/push queue/purge).
-- `supabase/functions/`: `api` (Hono routes in `app.ts`), `push` (`handler.ts`), `keepalive`, `mcp` (skeleton, phase 6), `_shared/` (deps, env, clients, errors, validation, apns, `domain/`). `.env.example` lists the function secrets.
+- `supabase/tests/database/*.test.sql`: pgTAP (RLS isolation, recipe components, stats/matching, drafts/shopping, apply_mutations conflicts, server_seq/pull/push queue/purge, household settings, auto-logged consumptions, shopping status, frozen items, defrost reminders).
+- `supabase/functions/`: `api` (Hono routes in `app.ts`), `push` (`handler.ts`: silent `sync` pushes + visible `defrost` alerts), `keepalive`, `mcp` (skeleton, phase 6), `_shared/` (deps, env, clients, errors, validation, apns, `domain/` with `sync`, `recipes`, `planning`, `households`, `push`). `.env.example` lists the function secrets.
 - `tests/functions`, `tests/scripts`: Deno unit tests (no network).
 - `scripts/`: `create-user.ts`, `import-notion.ts` (+ `lib/notion_import.ts`), `backup.sh`.
 - `.github/workflows/`: weekly `backup.yml`, daily `keepalive.yml`.
 
 ### API (`/functions/v1/api`)
 
-`GET /health` · `GET /me` · `POST /sync/push` · `GET /sync/pull?cursor&limit` · `PUT /devices` · `DELETE /devices/:id` · `POST /drafts/:id/accept|discard` · `POST /recipes/:id/expand` · `POST /shopping/from-plan`.
+`GET /health` · `GET /me` · `PATCH /households/:id/settings` · `POST /sync/push` · `GET /sync/pull?cursor&limit` · `PUT /devices` · `DELETE /devices/:id` · `POST /drafts/:id/accept|discard` · `POST /recipes/:id/expand` · `POST /shopping/from-plan`.
 
 ## Commands
 
