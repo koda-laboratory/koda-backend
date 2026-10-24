@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Conectar con Koda</title>
+  <style>
+    :root {
+      --onyx: #0D0D0D; --walnut: #592816; --taupe: #CCA097; --cream: #F6EEEB;
+      --bg: var(--cream); --card: #FFFFFF; --text: var(--onyx); --muted: #6B5650; --line: #EADBD6;
+      --brand: var(--walnut); --on-brand: var(--cream); --error: #B4533A;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: var(--onyx); --card: #1A1311; --text: var(--cream); --muted: #BFA8A1; --line: #2A140C;
+              --brand: #7A3A22; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px;
+           background: var(--bg); color: var(--text);
+           font: 16px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Rounded", system-ui, sans-serif; }
+    main { width: 100%; max-width: 420px; background: var(--card); border-radius: 28px; padding: 28px;
+           box-shadow: 0 10px 40px rgba(13, 13, 13, .08); }
+    .arcs { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center;
+            background: linear-gradient(var(--onyx), var(--walnut)); margin-bottom: 18px; }
+    .arcs span { width: 22px; height: 26px; border: 5px solid var(--taupe); border-top: 0; border-radius: 0 0 14px 14px; }
+    h1 { font-size: 26px; line-height: 1.15; margin: 0 0 6px; letter-spacing: -.02em; }
+    p { margin: 0 0 18px; color: var(--muted); }
+    .client { font-weight: 700; color: var(--text); }
+    ul { margin: 0 0 22px; padding: 0; list-style: none; }
+    li { padding: 10px 0; border-top: 1px solid var(--line); }
+    li:first-child { border-top: 0; }
+    label { display: block; font-size: 14px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
+    input { width: 100%; font: inherit; padding: 13px 14px; border-radius: 14px; border: 1px solid var(--line);
+            background: var(--bg); color: var(--text); margin-bottom: 14px; }
+    button { width: 100%; font: inherit; font-weight: 700; padding: 14px; border-radius: 999px; border: 0;
+             cursor: pointer; }
+    .primary { background: var(--brand); color: var(--on-brand); margin-bottom: 10px; }
+    .secondary { background: transparent; color: var(--muted); }
+    button:disabled { opacity: .55; cursor: default; }
+    .error { color: var(--error); font-weight: 600; min-height: 1.4em; margin: 6px 0 0; }
+    .small { font-size: 13px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="arcs" aria-hidden="true"><span></span></div>
+
+    <section id="loading"><h1>Conectando…</h1><p>Un momento.</p></section>
+
+    <section id="login" hidden>
+      <h1>Entra en Koda</h1>
+      <p>Para conectar <span class="client" data-client>un asistente</span> con vuestro hogar.</p>
+      <form id="login-form">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="username" required>
+        <label for="password">Contraseña</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+        <button class="primary" type="submit">Entrar</button>
+      </form>
+    </section>
+
+    <section id="consent" hidden>
+      <h1>¿Conectar <span data-client>este asistente</span>?</h1>
+      <p>Podrá usar Koda en nombre de <span class="client" id="user-email"></span>:</p>
+      <ul>
+        <li>Ver el planning, las recetas y la lista de la compra.</li>
+        <li>Apuntar cosas en la compra y planificar comidas.</li>
+        <li>Proponer borradores de planning, que revisáis en la app.</li>
+      </ul>
+      <button class="primary" id="approve">Permitir</button>
+      <button class="secondary" id="deny">Cancelar</button>
+      <p class="small" id="redirect"></p>
+    </section>
+
+    <section id="done" hidden><h1>Listo</h1><p>Ya puedes volver al asistente.</p></section>
+
+    <p class="error" id="error" role="alert"></p>
+  </main>
+
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm";
+
+    // Public by design (it also ships inside the app); Row Level Security protects the data.
+    const SUPABASE_URL = "https://vccllqqmrebbdfpekoud.supabase.co";
+    const PUBLISHABLE_KEY = "sb_publishable_AzlMslGv43dgzqVICb3k-w_g-MmRaHQ";
+
+    const supabase = createClient(SUPABASE_URL, PUBLISHABLE_KEY);
+    const authorizationId = new URLSearchParams(location.search).get("authorization_id");
+    const $ = (id) => document.getElementById(id);
+
+    function show(id) {
+      for (const section of ["loading", "login", "consent", "done"]) $(section).hidden = section !== id;
+    }
+    function fail(message) {
+      $("error").textContent = message;
+    }
+    function setClientName(name) {
+      for (const el of document.querySelectorAll("[data-client]")) el.textContent = name;
+    }
+
+    async function loadConsent() {
+      show("loading");
+      const { data, error } = await supabase.auth.oauth.getAuthorizationDetails(authorizationId);
+      if (error) return fail("Esta solicitud ya no es válida. Vuelve a conectar desde el asistente.");
+      if (!("authorization_id" in data)) {
+        // Already approved for this client: straight back to it.
+        location.href = data.redirect_url;
+        return;
+      }
+      setClientName(data.client?.name || "este asistente");
+      $("user-email").textContent = data.user?.email ?? "";
+      $("redirect").textContent = `Volverás a ${new URL(data.redirect_uri).host}.`;
+      show("consent");
+    }
+
+    async function decide(approve) {
+      $("approve").disabled = $("deny").disabled = true;
+      const { data, error } = approve
+        ? await supabase.auth.oauth.approveAuthorization(authorizationId, { skipBrowserRedirect: true })
+        : await supabase.auth.oauth.denyAuthorization(authorizationId, { skipBrowserRedirect: true });
+      if (error) {
+        $("approve").disabled = $("deny").disabled = false;
+        return fail("No se ha podido completar. Inténtalo de nuevo.");
+      }
+      show("done");
+      location.href = data.redirect_url;
+    }
+
+    $("login-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      fail("");
+      const button = event.submitter;
+      button.disabled = true;
+      const { error } = await supabase.auth.signInWithPassword({
+        email: $("email").value.trim(),
+        password: $("password").value,
+      });
+      button.disabled = false;
+      if (error) return fail("Email o contraseña incorrectos.");
+      await loadConsent();
+    });
+    $("approve").addEventListener("click", () => decide(true));
+    $("deny").addEventListener("click", () => decide(false));
+
+    if (!authorizationId) {
+      show("done");
+      fail("Falta la solicitud de conexión. Empieza desde el asistente.");
+    } else {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) await loadConsent();
+      else show("login");
+    }
+  </script>
+</body>
+</html>
