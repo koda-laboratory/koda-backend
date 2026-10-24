@@ -3,6 +3,7 @@ import { createMcpApp, type McpDeps } from "../../supabase/functions/mcp/app.ts"
 import type { RpcClient } from "../../supabase/functions/_shared/db.ts";
 import { addDays } from "../../supabase/functions/mcp/resolve.ts";
 import { sniffImage } from "../../supabase/functions/mcp/images.ts";
+import { illustrateRecipesText } from "../../supabase/functions/mcp/prompts.ts";
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 
@@ -224,6 +225,22 @@ Deno.test("plan_week prompt guides the agent to a draft", async () => {
   const text = result.messages[0].content.text as string;
   assertStringIncludes(text, "create_meal_plan_draft");
   assertStringIncludes(text, "invitados el sábado");
+});
+
+Deno.test("illustrate_recipes prompt carries the cover style and the upload flow", async () => {
+  const { rpc } = setup();
+  const { result } = await (await rpc("prompts/get", { name: "illustrate_recipes", arguments: { limit: "3" } }))
+    .json();
+  const text = result.messages[0].content.text as string;
+  assertStringIncludes(text, "list_recipes_missing_cover and take at most 3");
+  assertStringIncludes(text, "#CCA097");
+  assertStringIncludes(text, "finish_recipe_image_upload");
+});
+
+Deno.test("illustrate_recipes for named recipes skips the catalog scan", () => {
+  const text = illustrateRecipesText("50", "Tortilla de patata, Lentejas");
+  assertStringIncludes(text, "Recipes: Tortilla de patata, Lentejas.");
+  assertEquals(text.includes("list_recipes_missing_cover"), false);
 });
 
 Deno.test("addDays crosses months", () => {

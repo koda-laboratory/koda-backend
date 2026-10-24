@@ -34,7 +34,8 @@ const INSTRUCTIONS = [
   "automatically. To propose several meals at once, create a draft (create_meal_plan_draft) that the household",
   "reviews in the app instead of planning them one by one. Recipe images: Koda does not generate them; make one",
   "with your own image tool and hand it over with set_recipe_cover (a URL) or create_recipe_image_upload (a file),",
-  "and never replace an existing cover unless asked. Reply in the user's language.",
+  "and never replace an existing cover unless asked. Follow the illustrate_recipes prompt for the house style",
+  "(painted food on a plain rosy taupe #CCA097 background). Reply in the user's language.",
 ].join(" ");
 
 const PROTECTED_RESOURCE_PATH = "/.well-known/oauth-protected-resource";
