@@ -9,6 +9,7 @@ export const SYNCED_TABLES = [
   "recipes",
   "recipe_ingredients",
   "recipe_components",
+  "recipe_photos",
   "meal_plan_drafts",
   "meal_plan_entries",
   "consumptions",
