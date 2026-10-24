@@ -5,7 +5,11 @@ description: Build Koda's remote MCP server (Edge Function `mcp`, phase 6) — s
 
 # MCP tools
 
-Status: `supabase/functions/mcp/index.ts` is a skeleton (`GET /mcp/health`, everything else 501). Phase 6 implements it.
+Status: implemented. `mcp/app.ts` (CORS, `/health`, `/.well-known/oauth-protected-resource`, 401 with `WWW-Authenticate`, a stateless `McpServer` per request), `mcp/tools.ts` (16 tools), `mcp/prompts.ts` (`plan_week`), `mcp/resolve.ts` (recipe names and today/tomorrow → ids and dates). Tools call the `public.mcp_*` SQL functions of migration `…11_mcp_tools`. Tests: `tests/functions/mcp_test.ts`, `supabase/tests/database/12_mcp_tools.test.sql`.
+
+The server is client-agnostic: standard Streamable HTTP + OAuth 2.1 discovery and dynamic registration, so it works with any MCP client (Claude, ChatGPT, Cursor, Codex, Gemini CLI…). Never add client-specific behavior.
+
+Tools: `get_household`, `get_meals`, `plan_meal`, `remove_planned_meal`, `get_meal_history`, `search_recipes`, `get_recipe`, `get_recipe_stats`, `get_shopping_list`, `add_to_shopping_list`, `set_shopping_status`, `add_recipe_to_shopping_list`, `create_meal_plan_draft`, `list_meal_plan_drafts`, `accept_meal_plan_draft`, `discard_meal_plan_draft`. There is no `log_meal`: the apps removed manual eaten logging (meals are logged automatically at their time).
 
 ## Principles
 
@@ -20,6 +24,7 @@ Status: `supabase/functions/mcp/index.ts` is a skeleton (`GET /mcp/health`, ever
 
 - `[auth.oauth_server] enabled = true`, `allow_dynamic_registration = true` in `config.toml`.
 - Publish `/.well-known/oauth-protected-resource` pointing to Supabase Auth; consent UI in `web/oauth/` (GitHub Pages).
+- Hosted: Site URL `https://koda-laboratory.github.io`, authorization path `/koda-backend/oauth/consent` (dashboard). The consent page uses supabase-js `auth.oauth.getAuthorizationDetails` / `approveAuthorization` / `denyAuthorization`.
 - Fallback if OAuth fails: personal access tokens stored hashed.
 
 ## Implementation checklist

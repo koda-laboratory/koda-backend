@@ -16,7 +16,7 @@ Backend of Koda, a private household app (first module: Comidita — recipes, me
 
 ## Project map
 
-- `supabase/config.toml`: local stack config (sign-ups disabled, email/password only, OAuth server enabled for the future MCP, `verify_jwt = false` on all functions because they authenticate themselves).
+- `supabase/config.toml`: local stack config (sign-ups disabled, email/password only, OAuth server enabled for the MCP, `verify_jwt = false` on all functions because they authenticate themselves).
 - `supabase/migrations/`:
   - `…01_extensions` pg_trgm, unaccent, pg_net, pg_cron, schema `private`, `normalize_text`.
   - `…02_core_schema` enums, households/profiles/members, `household_ids_for_user()`, synced tables, `sync_seq` + `private.sync_row()`, cascade tombstones, indexes.
@@ -28,12 +28,14 @@ Backend of Koda, a private household app (first module: Comidita — recipes, me
   - `…08_auto_consumptions` `meal_plan_entries.scheduled_time` / `skipped_at`, `consumptions.source` + live unique index per entry, `private.meal_starts_at`, `auto_log_consumptions` (pg_cron every 15 min).
   - `…09_shopping_status` `status` (`pending|have|frozen`) on `shopping_entries` / `shopping_entry_items` kept consistent with `checked`, `apply_mutations` with `status` in the `checked_at` group and the `frozen_items` write rules.
   - `…10_frozen_items` synced `frozen_items` (server-maintained, linking/relinking triggers), `push_queue.dedupe_key` + kind-aware uniqueness, `due_defrost_reminders` (pg_cron every 15 min).
+  - `…11_mcp_tools` one SECURITY INVOKER function per MCP tool (`mcp_get_meals`, `mcp_plan_meal`, `mcp_shopping_list`, `mcp_add_shopping_items`, `mcp_set_shopping_status`, `mcp_add_recipe_to_shopping`, `mcp_search_recipes`, `mcp_resolve_recipe`, `mcp_get_recipe`, `mcp_recipe_stats`, `mcp_meal_history`, `mcp_create_meal_plan_draft`, `mcp_list_drafts`, `mcp_remove_planned_meal`, `mcp_today`, `mcp_household_id`).
 - `supabase/seed.sql`: local-only household "Casa (local)" with `a@koda.test` / `b@koda.test` (password `koda-local-password`) and sample data.
 - `supabase/tests/database/*.test.sql`: pgTAP (RLS isolation, recipe components, stats/matching, drafts/shopping, apply_mutations conflicts, server_seq/pull/push queue/purge, household settings, auto-logged consumptions, shopping status, frozen items, defrost reminders).
-- `supabase/functions/`: `api` (Hono routes in `app.ts`), `push` (`handler.ts`: silent `sync` pushes + visible `defrost` alerts), `keepalive`, `mcp` (skeleton, phase 6), `_shared/` (deps, env, clients, errors, validation, apns, `domain/` with `sync`, `recipes`, `planning`, `households`, `push`). `.env.example` lists the function secrets.
+- `supabase/functions/`: `api` (Hono routes in `app.ts`), `push` (`handler.ts`: silent `sync` pushes + visible `defrost` alerts), `keepalive`, `mcp` (remote MCP server: `app.ts` auth + discovery, `tools.ts`, `prompts.ts`, `resolve.ts`), `_shared/` (deps, env, clients, errors, validation, apns, `domain/` with `sync`, `recipes`, `planning`, `households`, `push`). `.env.example` lists the function secrets.
 - `tests/functions`, `tests/scripts`: Deno unit tests (no network).
+- `web/oauth/consent.html`: OAuth consent page of the MCP server, published to GitHub Pages by `.github/workflows/oauth-pages.yml`.
 - `scripts/`: `create-user.ts`, `import-notion.ts` (+ `lib/notion_import.ts`), `backup.sh`.
-- `.github/workflows/`: weekly `backup.yml`, daily `keepalive.yml`.
+- `.github/workflows/`: weekly `backup.yml`, daily `keepalive.yml`, `oauth-pages.yml` (consent page).
 
 ### API (`/functions/v1/api`)
 

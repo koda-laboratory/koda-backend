@@ -66,7 +66,7 @@ deno task fmt
 
 All routes except `/health` require `Authorization: Bearer <access token>` and run with that JWT (RLS). Errors: `{ "error": { "code", "message", "details"? } }`. Sync semantics: [`.agents/skills/sync-contract/SKILL.md`](.agents/skills/sync-contract/SKILL.md).
 
-Internal functions: `push` and `keepalive` (POST with header `x-koda-secret`), `mcp` (skeleton until phase 6).
+Internal functions: `push` and `keepalive` (POST with header `x-koda-secret`). `mcp` is the remote MCP server (see below).
 
 ## Scripts
 
@@ -151,4 +151,23 @@ Both workflows fail until these secrets exist.
 
 ## Auth
 
-Email + password only, sign-ups disabled (`[auth] enable_signup = false`). Note that `[auth.email] enable_signup` must stay `true`: in the CLI it enables the email provider itself. The hosted project needs the same settings in the dashboard (Authentication → Sign In / Providers): disable "Allow new users to sign up", keep Email enabled. The OAuth 2.1 server is enabled for the future MCP connector.
+## MCP server (`/functions/v1/mcp`)
+
+A standard remote MCP server (Streamable HTTP, stateless) usable from any MCP client: Claude, ChatGPT, Cursor, Codex, Gemini CLI… Authentication is OAuth 2.1 through the Supabase Auth OAuth server, with discovery and dynamic client registration:
+
+1. The client calls `https://<ref>.supabase.co/functions/v1/mcp` and gets `401` with `WWW-Authenticate: Bearer resource_metadata=".../mcp/.well-known/oauth-protected-resource"`.
+2. That metadata names `https://<ref>.supabase.co/auth/v1` as the authorization server; the client registers itself and starts the authorization code flow with PKCE.
+3. Supabase Auth sends the person to the consent page `web/oauth/consent.html` (GitHub Pages: `https://koda-laboratory.github.io/koda-backend/oauth/consent`), where they sign in with their Koda account and approve.
+4. Every tool runs with that access token, so RLS limits it to their household. Tools are SQL functions `public.mcp_*` (migration `…11_mcp_tools`).
+
+Hosted setup (once, in the dashboard):
+
+- Authentication → OAuth Server: enable it, allow dynamic client registration, authorization path `/koda-backend/oauth/consent`.
+- Authentication → URL Configuration: Site URL `https://koda-laboratory.github.io`.
+- GitHub repository → Settings → Pages: source "GitHub Actions" (workflow `oauth-pages.yml` publishes `web/`).
+
+Connect a client with the URL `https://<ref>.supabase.co/functions/v1/mcp` (for example `claude mcp add --transport http koda <url>`, or "Add custom connector" in Claude / ChatGPT). Local smoke test: `supabase functions serve mcp --no-verify-jwt` with `MCP_PUBLIC_URL=http://127.0.0.1:54321`.
+
+## Auth
+
+Email + password only, sign-ups disabled (`[auth] enable_signup = false`). Note that `[auth.email] enable_signup` must stay `true`: in the CLI it enables the email provider itself. The hosted project needs the same settings in the dashboard (Authentication → Sign In / Providers): disable "Allow new users to sign up", keep Email enabled. The OAuth 2.1 server is enabled for the MCP server (see above).
