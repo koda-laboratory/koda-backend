@@ -2,6 +2,9 @@ import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1.0.
 import { createMcpApp, type McpDeps } from "../../supabase/functions/mcp/app.ts";
 import type { RpcClient } from "../../supabase/functions/_shared/db.ts";
 import { addDays } from "../../supabase/functions/mcp/resolve.ts";
+import { sniffImage } from "../../supabase/functions/mcp/images.ts";
+
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 
 const USER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const GOOD_TOKEN = "good-token";
@@ -21,14 +24,31 @@ class FakeDb implements RpcClient {
   }
 }
 
-function setup(handlers: Record<string, RpcHandler> = {}) {
+function setup(
+  handlers: Record<string, RpcHandler> = {},
+  images: Record<string, Uint8Array | number> = {},
+) {
   const db = new FakeDb(handlers);
+  const uploads: Array<{ path: string; contentType: string; size: number }> = [];
   const authorizations: string[] = [];
   const deps: McpDeps = {
     verifyToken: (jwt) => Promise.resolve(jwt === GOOD_TOKEN ? { id: USER_ID } : null),
     clientFor: (authorization) => {
       authorizations.push(authorization);
       return db;
+    },
+    storeFor: () => ({
+      upload: (path, bytes, contentType) => {
+        uploads.push({ path, contentType, size: bytes.length });
+        return Promise.resolve();
+      },
+      signedUploadUrl: (path) => Promise.resolve(`https://storage.example/upload/${path}?token=t`),
+    }),
+    fetchImage: (url) => {
+      const image = images[url];
+      if (image === undefined) return Promise.resolve(new Response("nope", { status: 404 }));
+      if (typeof image === "number") return Promise.resolve(new Response(new Uint8Array(image)));
+      return Promise.resolve(new Response(new Uint8Array(image)));
     },
     resourceUrl: RESOURCE,
     authorizationServer: "https://koda.example/auth/v1",
@@ -53,7 +73,7 @@ function setup(handlers: Record<string, RpcHandler> = {}) {
     const body = await response.json();
     return body.result as { content: Array<{ text: string }>; isError?: boolean };
   };
-  return { app, db, authorizations, rpc, callTool };
+  return { app, db, authorizations, rpc, callTool, uploads };
 }
 
 Deno.test("health and the protected resource metadata are public", async () => {
@@ -116,6 +136,11 @@ Deno.test("tools are listed with read-only hints on reads", async () => {
       "list_meal_plan_drafts",
       "accept_meal_plan_draft",
       "discard_meal_plan_draft",
+      "list_recipes_missing_cover",
+      "set_recipe_cover",
+      "add_recipe_photo",
+      "create_recipe_image_upload",
+      "finish_recipe_image_upload",
     ]
   ) {
     assert(tools.has(name), `missing tool ${name}`);
@@ -204,4 +229,69 @@ Deno.test("plan_week prompt guides the agent to a draft", async () => {
 Deno.test("addDays crosses months", () => {
   assertEquals(addDays("2026-10-31", 1), "2026-11-01");
   assertEquals(addDays("2026-03-01", -1), "2026-02-28");
+});
+
+const HOUSEHOLD = "11111111-1111-4111-8111-111111111111";
+const imageHandlers: Record<string, RpcHandler> = {
+  mcp_resolve_recipe: () => ({ data: [{ id: "r1", name: "Tortilla de patata", score: 1 }] }),
+  mcp_household_id: () => ({ data: HOUSEHOLD }),
+  mcp_set_recipe_cover: (args) => ({ data: { recipe_id: args?.p_recipe_id, image_path: args?.p_path } }),
+};
+
+Deno.test("sniffImage trusts the bytes, not the headers", () => {
+  assertEquals(sniffImage(PNG)?.mime, "image/png");
+  assertEquals(sniffImage(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]))?.ext, "jpg");
+  assertEquals(sniffImage(new TextEncoder().encode("<html>")), null);
+});
+
+Deno.test("set_recipe_cover downloads the image into the recipe's household folder", async () => {
+  const { callTool, db, uploads } = setup(imageHandlers, { "https://img.example/tortilla.png": PNG });
+  const result = await callTool("set_recipe_cover", {
+    recipe: "tortilla",
+    image_url: "https://img.example/tortilla.png",
+  });
+  assertEquals(result.isError, undefined);
+  assertEquals(uploads.length, 1);
+  assertEquals(uploads[0].contentType, "image/png");
+  assert(uploads[0].path.startsWith(`${HOUSEHOLD}/r1/`) && uploads[0].path.endsWith(".png"));
+  const call = db.calls.find((c) => c.fn === "mcp_set_recipe_cover");
+  assertEquals(call?.args?.p_path, uploads[0].path);
+  assertEquals(call?.args?.p_overwrite, false);
+});
+
+Deno.test("set_recipe_cover refuses non-https URLs, non-images and files over 5 MB", async () => {
+  const { callTool, uploads } = setup(imageHandlers, {
+    "https://img.example/page.html": new TextEncoder().encode("<html>"),
+    "https://img.example/huge.png": 5 * 1024 * 1024 + 1,
+  });
+  for (const url of ["http://img.example/x.png", "https://img.example/page.html", "https://img.example/huge.png"]) {
+    const result = await callTool("set_recipe_cover", { recipe: "tortilla", image_url: url });
+    assertEquals(result.isError, true, url);
+  }
+  const expired = await callTool("set_recipe_cover", { recipe: "tortilla", image_url: "https://img.example/gone.png" });
+  assertStringIncludes(expired.content[0].text, "404");
+  assertEquals(uploads.length, 0);
+});
+
+Deno.test("the upload flow hands out a one-time URL and attaches the uploaded file", async () => {
+  const { callTool, db } = setup({
+    ...imageHandlers,
+    mcp_add_recipe_photo: (args) => ({ data: { photo_id: "p1", image_path: args?.p_path } }),
+  });
+  const started = JSON.parse(
+    (await callTool("create_recipe_image_upload", { recipe: "tortilla", format: "webp" }))
+      .content[0].text,
+  );
+  assertEquals(started.method, "PUT");
+  assertEquals(started.content_type, "image/webp");
+  assert(started.image_path.startsWith(`${HOUSEHOLD}/r1/`) && started.image_path.endsWith(".webp"));
+  assertStringIncludes(started.upload_url, started.image_path);
+
+  const finished = await callTool("finish_recipe_image_upload", {
+    recipe: "tortilla",
+    image_path: started.image_path,
+    purpose: "photo",
+  });
+  assertEquals(JSON.parse(finished.content[0].text).photo_id, "p1");
+  assertEquals(db.calls.find((c) => c.fn === "mcp_add_recipe_photo")?.args?.p_path, started.image_path);
 });

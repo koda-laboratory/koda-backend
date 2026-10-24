@@ -6,7 +6,8 @@
 // caller's access token, so RLS limits it to their household exactly like the apps.
 import { cors, Hono, McpServer, WebStandardStreamableHTTPServerTransport } from "../_shared/deps.ts";
 import type { RpcClient } from "../_shared/db.ts";
-import { registerTools } from "./tools.ts";
+import { registerTools, run } from "./tools.ts";
+import { type ImageFetcher, type ImageStore, registerImageTools } from "./images.ts";
 import { registerPrompts } from "./prompts.ts";
 
 export interface McpDeps {
@@ -14,6 +15,10 @@ export interface McpDeps {
   verifyToken(jwt: string): Promise<{ id: string } | null>;
   /** Database client bound to the caller's `Authorization` header. */
   clientFor(authorization: string): RpcClient;
+  /** Recipe image storage bound to the caller's `Authorization` header. */
+  storeFor(authorization: string): ImageStore;
+  /** Downloads images agents hand over by URL. */
+  fetchImage: ImageFetcher;
   /** Public URL of this function (`https://<ref>.supabase.co/functions/v1/mcp`). */
   resourceUrl: string;
   /** Supabase Auth issuer (`https://<ref>.supabase.co/auth/v1`). */
@@ -27,7 +32,9 @@ const INSTRUCTIONS = [
   "of one household. Dates are in the household's time zone: call get_household first for today's date and the",
   "usual meal times. Recipes can be referred to by name. Planned meals that already passed are logged as eaten",
   "automatically. To propose several meals at once, create a draft (create_meal_plan_draft) that the household",
-  "reviews in the app instead of planning them one by one. Reply in the user's language.",
+  "reviews in the app instead of planning them one by one. Recipe images: Koda does not generate them; make one",
+  "with your own image tool and hand it over with set_recipe_cover (a URL) or create_recipe_image_upload (a file),",
+  "and never replace an existing cover unless asked. Reply in the user's language.",
 ].join(" ");
 
 const PROTECTED_RESOURCE_PATH = "/.well-known/oauth-protected-resource";
@@ -73,7 +80,9 @@ export function createMcpApp(deps: McpDeps): Hono {
 
     // Stateless: a server per request, bound to this caller's database client.
     const server = new McpServer(SERVER_INFO, { instructions: INSTRUCTIONS });
-    registerTools(server, deps.clientFor(`Bearer ${token}`));
+    const db = deps.clientFor(`Bearer ${token}`);
+    registerTools(server, db);
+    registerImageTools(server, db, deps.storeFor(`Bearer ${token}`), deps.fetchImage, run);
     registerPrompts(server);
     const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true });
     await server.connect(transport);

@@ -18,7 +18,7 @@ const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true, openWorldHint:
 type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
 
 /** Runs a handler and turns its value (or error) into an MCP result agents can read. */
-async function run(handler: () => Promise<unknown>): Promise<ToolResult> {
+export async function run(handler: () => Promise<unknown>): Promise<ToolResult> {
   try {
     const value = await handler();
     return { content: [{ type: "text", text: JSON.stringify(value ?? null, null, 2) }] };
