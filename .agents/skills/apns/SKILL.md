@@ -12,7 +12,7 @@ description: Operate and extend Koda's Apple Push Notification pipeline — devi
 3. pg_cron job `koda-push` (every minute) → `private.kick_push()` → if there are pending rows, `net.http_post` to `<koda_functions_url>/push` with header `x-koda-secret` (Vault `koda_push_secret`).
 4. `push` function: `claim_push_batch` (marks rows sent) → `push_devices_for_households` → `planPushes` (`sync`: one silent push per device, skipping a device only if it was the actor of every change of its household; `defrost`: one alert per reminder and device) → `ApnsClient.send` → `410` sets `devices.disabled_at`.
 
-## Silent payload (PLAN.md 6.4)
+## Silent payload
 
 ```json
 { "aps": { "content-available": 1 }, "koda": { "reason": "planning|shopping", "cursor": 1234 } }
@@ -20,7 +20,7 @@ description: Operate and extend Koda's Apple Push Notification pipeline — devi
 
 Headers: `apns-push-type: background`, `apns-priority: 5`, `apns-expiration: now + 3600`, `apns-topic: com.kodalabs.app` (same bundle id on iOS and macOS). Host: `api.sandbox.push.apple.com` for `sandbox` devices (Xcode builds), `api.push.apple.com` for `production` (TestFlight).
 
-## Visible defrost alert (PLAN.md 3.6)
+## Visible defrost alert
 
 `due_defrost_reminders()` (pg_cron every 15 min) inserts `push_queue` rows with `kind = 'defrost'`, `payload = { title, body, frozen_item_id, product_id, meal_plan_entry_id, recipe_id }` (Spanish copy, e.g. "Descongela carrilleras" / "Mañana a las 14:30 toca Paella de carrilleras") and `dedupe_key = 'defrost:<frozen_item_id>:<remind epoch>'` (unique; sync rows are unique per `(household_id, txid) where kind = 'sync'`). The `push` function sends each one to **every** device of the household, actor included:
 

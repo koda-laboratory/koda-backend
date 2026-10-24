@@ -1,6 +1,6 @@
 ---
 name: mcp-tools
-description: Build Koda's remote MCP server (Edge Function `mcp`, phase 6) — stateless Streamable HTTP transport, OAuth 2.1 through the Supabase Auth OAuth server, the tools of PLAN.md 8.3 (get_meals, get_shopping_list, add_to_shopping_list, check_shopping_items, add_recipe_to_shopping_list, search_recipes, get_recipe, get_meal_history, get_recipe_stats, plan_meal, log_meal, create_meal_plan_draft), the plan_week prompt, annotations and tests. Use when implementing or changing MCP tools or MCP auth. Not for the app API (edge-functions).
+description: Build Koda's remote MCP server (Edge Function `mcp`, phase 6) — stateless Streamable HTTP transport, OAuth 2.1 through the Supabase Auth OAuth server, the tools (meals and planning, drafts, shopping list, recipes and stats, recipe covers and photos), the plan_week and illustrate_recipes prompts, annotations and tests. Use when implementing or changing MCP tools or MCP auth. Not for the app API (edge-functions).
 ---
 
 # MCP tools
@@ -20,7 +20,7 @@ Tools: `get_household`, `get_meals`, `plan_meal`, `remove_planned_meal`, `get_me
 - Annotate tools: `readOnlyHint: true` for reads; `destructiveHint` for writes that remove or overwrite; set `source = 'mcp'` on shopping entries and drafts.
 - Drafts never replace the planning: `create_meal_plan_draft` inserts `meal_plan_drafts` + entries with `draft_id`; accepting is done in the app (or explicitly via an accept tool).
 
-## Auth (PLAN.md 8.2)
+## Auth
 
 - `[auth.oauth_server] enabled = true`, `allow_dynamic_registration = true` in `config.toml`.
 - Publish `/.well-known/oauth-protected-resource` pointing to Supabase Auth; consent UI in `web/oauth/` (GitHub Pages).

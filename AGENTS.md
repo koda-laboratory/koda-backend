@@ -1,6 +1,6 @@
 # Koda backend repository instructions
 
-Backend of Koda, a private household app (first module: Comidita — recipes, meal planning and shopping list) for two people. Supabase: Postgres + Auth + Deno Edge Functions. The iPhone/Mac app lives in `../koda-app-ios-macos`; the authoritative plan is `../PLAN.md` (sections 3, 6, 8, 11 and 12 concern this repo).
+Backend of Koda, a private household app (first module: Comidita — recipes, meal planning and shopping list) for two people. Supabase: Postgres + Auth + Deno Edge Functions. The iPhone/Mac app lives in `../koda-app-ios-macos`.
 
 ## Invariants
 

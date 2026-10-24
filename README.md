@@ -1,6 +1,6 @@
 # koda-backend
 
-Supabase backend for **Koda** (household recipes, meal planning and shopping list): Postgres schema with RLS, a local-first sync API, silent APNs pushes and maintenance jobs. The plan lives in `../PLAN.md`; agent instructions in [`AGENTS.md`](AGENTS.md).
+Supabase backend for **Koda** (household recipes, meal planning and shopping list): Postgres schema with RLS, a local-first sync API, silent APNs pushes and maintenance jobs. Agent instructions live in [`AGENTS.md`](AGENTS.md).
 
 There is a **single** hosted environment, the Supabase project `koda`. The local Docker stack is only for tests.
 
