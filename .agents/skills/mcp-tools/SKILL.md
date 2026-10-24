@@ -9,7 +9,7 @@ Status: implemented. `mcp/app.ts` (CORS, `/health`, `/.well-known/oauth-protecte
 
 The server is client-agnostic: standard Streamable HTTP + OAuth 2.1 discovery and dynamic registration, so it works with any MCP client (Claude, ChatGPT, Cursor, Codex, Gemini CLI…). Never add client-specific behavior.
 
-Tools: `get_household`, `get_meals`, `plan_meal`, `remove_planned_meal`, `get_meal_history`, `search_recipes`, `get_recipe`, `get_recipe_stats`, `get_shopping_list`, `add_to_shopping_list`, `set_shopping_status`, `add_recipe_to_shopping_list`, `create_meal_plan_draft`, `list_meal_plan_drafts`, `accept_meal_plan_draft`, `discard_meal_plan_draft`. There is no `log_meal`: the apps removed manual eaten logging (meals are logged automatically at their time).
+Tools: `get_household`, `get_meals`, `plan_meal`, `remove_planned_meal`, `get_meal_history`, `search_recipes`, `get_recipe`, `get_recipe_stats`, `get_shopping_list`, `add_to_shopping_list`, `set_shopping_status`, `add_recipe_to_shopping_list`, `create_meal_plan_draft`, `list_meal_plan_drafts`, `accept_meal_plan_draft`, `discard_meal_plan_draft`, and the recipe image tools `list_recipes_missing_cover`, `set_recipe_cover` (from an https URL), `add_recipe_photo`, `create_recipe_image_upload` + `finish_recipe_image_upload` (signed upload for agents that hold the bytes). Images live in the private Storage bucket `recipe-images` at `<household>/<recipe>/<uuid>.<ext>` (migration `…12`); covers set by agents get `recipes.image_source = 'ai'`. There is no `log_meal`: the apps removed manual eaten logging (meals are logged automatically at their time).
 
 ## Principles
 

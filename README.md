@@ -160,6 +160,8 @@ A standard remote MCP server (Streamable HTTP, stateless) usable from any MCP cl
 3. Supabase Auth sends the person to the consent page `web/oauth/consent.html` (GitHub Pages: `https://koda-laboratory.github.io/koda-backend/oauth/consent`), where they sign in with their Koda account and approve.
 4. Every tool runs with that access token, so RLS limits it to their household. Tools are SQL functions `public.mcp_*` (migration `…11_mcp_tools`).
 
+Recipe images (migration `…12_recipe_images`) live in the private Storage bucket `recipe-images` at `<household>/<recipe>/<uuid>.<ext>` (5 MB, JPEG/PNG/WebP), with Storage policies on the household folder. The gallery is the synced table `recipe_photos`; the cover is `recipes.image_path` with `image_source` `photo` (app) or `ai` (agent). Agents find recipes without a cover with `list_recipes_missing_cover` and attach an image either by https URL (`set_recipe_cover`, `add_recipe_photo`) or, when they hold the bytes, with a signed upload (`create_recipe_image_upload` → `PUT` → `finish_recipe_image_upload`).
+
 Hosted setup (once, in the dashboard):
 
 - Authentication → OAuth Server: enable it, allow dynamic client registration, authorization path `/koda-backend/oauth/consent`.
