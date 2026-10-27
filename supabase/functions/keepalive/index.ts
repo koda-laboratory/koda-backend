@@ -1,12 +1,10 @@
 // Entry point of the internal `keepalive` Edge Function.
 // Called daily by pg_cron and by the GitHub Actions fallback. It keeps the free-plan project
-// active, purges tombstones older than 30 days (public.purge_tombstones) and removes orphan recipe images.
+// active, purges tombstones older than 30 days (public.purge_tombstones) and removes orphan recipe and product images.
 import { optionalEnv } from "../_shared/env.ts";
 import { hasInternalSecret } from "../_shared/internal.ts";
 import { createAdminClient } from "../_shared/supabase.ts";
-import { type KeepaliveStore, runKeepalive } from "./handler.ts";
-
-const BUCKET = "recipe-images";
+import { IMAGE_BUCKETS, type KeepaliveStore, runKeepalive } from "./handler.ts";
 
 function adminStore(): KeepaliveStore {
   const client = createAdminClient();
@@ -16,13 +14,13 @@ function adminStore(): KeepaliveStore {
       if (error) throw error;
       return (data ?? {}) as Record<string, unknown>;
     },
-    async orphanRecipeImages(limit) {
-      const { data, error } = await client.rpc("orphan_recipe_images", { p_limit: limit });
+    async orphanImages(bucket, limit) {
+      const { data, error } = await client.rpc(IMAGE_BUCKETS[bucket], { p_limit: limit });
       if (error) throw error;
       return (data ?? []) as string[];
     },
-    async removeRecipeImages(paths) {
-      const { error } = await client.storage.from(BUCKET).remove(paths);
+    async removeImages(bucket, paths) {
+      const { error } = await client.storage.from(bucket).remove(paths);
       if (error) throw error;
     },
   };
