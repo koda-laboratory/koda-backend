@@ -162,6 +162,8 @@ A standard remote MCP server (Streamable HTTP, stateless) usable from any MCP cl
 
 Recipe images (migration `…12_recipe_images`) live in the private Storage bucket `recipe-images` at `<household>/<recipe>/<uuid>.<ext>` (5 MB, JPEG/PNG/WebP), with Storage policies on the household folder. The gallery is the synced table `recipe_photos`; the cover is `recipes.image_path` with `image_source` `photo` (app) or `ai` (agent). Agents find recipes without a cover with `list_recipes_missing_cover` and attach an image either by https URL (`set_recipe_cover`, `add_recipe_photo`) or, when they hold the bytes, with a signed upload (`create_recipe_image_upload` → `PUT` → `finish_recipe_image_upload`). The `illustrate_recipes` prompt carries the house cover style (painted food on a plain `#CCA097` background) and the whole flow. Images that no live recipe or photo references any more (older than 3 days) are removed daily by `keepalive` (`orphan_recipe_images`, migration `…13`).
 
+Product images (migration `…_product_images_and_recipe_links`) follow the same model in the private bucket `product-images` at `<household>/<product>/<uuid>.<ext>`: the cover is `products.image_path` / `image_source`, the gallery the synced table `product_photos` (photos of the pack or brand, to recognise it while shopping), and `keepalive` removes their orphans too (`orphan_product_images`). Recipes also keep video links (TikTok, Instagram reels, YouTube shorts) in the synced table `recipe_links`: only `http(s)` URLs up to 2048 characters, tombstoned with their recipe.
+
 Hosted setup (once, in the dashboard):
 
 - Authentication → OAuth Server: enable it, allow dynamic client registration, authorization path `/koda-backend/oauth/consent`.
